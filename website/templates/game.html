@@ -38,7 +38,6 @@ h1 { color: #f9a825; letter-spacing: 4px; font-size: 20px; margin-bottom: 4px; }
 .seat-chip.team-b { background:rgba(239,154,154,0.15); color:#ef9a9a; border-color:rgba(239,154,154,0.3); }
 .level-row { display:flex; gap:10px; align-items:center; margin-bottom:8px; }
 .level-row label { font-size:13px; width:70px; }
-/* FIX: dropdown text black */
 select { background:white; border:1px solid rgba(255,255,255,0.15); color:#111; border-radius:8px; padding:6px 10px; font-size:13px; font-family:inherit; outline:none; }
 select option { color:#111; background:white; }
 .placement-info { font-size:12px; color:rgba(255,255,255,0.4); line-height:1.7; }
@@ -149,7 +148,6 @@ select option { color:#111; background:white; }
     <h3>Teams</h3>
     <div class="team-row">
       <span class="team-label team-a-label">Team A</span>
-      <!-- chips will show player names, filled in by renderTeamChips() -->
       <span class="seat-chip" id="chip-bottom" onclick="cycleSeat('bottom')">…</span>
       <span class="seat-chip" id="chip-left"   onclick="cycleSeat('left')">…</span>
       <span class="seat-chip" id="chip-top"    onclick="cycleSeat('top')">…</span>
@@ -181,14 +179,11 @@ select option { color:#111; background:white; }
   <div class="panel" id="placement-panel">
     <h3>Previous Round Placements (optional)</h3>
     <div style="font-size:11px;color:rgba(255,255,255,0.3);margin-bottom:10px;">Click players in finishing order (1st → 4th). Click a name tag to remove it.</div>
-    <!-- buttons for each player -->
     <div class="placement-btn-row" id="placement-btns"></div>
-    <!-- ordered tags showing current selection -->
     <div class="place-order" id="place-order"></div>
     <div style="margin-top:8px;display:flex;gap:8px;">
       <button class="btn" onclick="clearPlacements()">Clear</button>
     </div>
-    <!-- Tribute preview -->
     <div class="tribute-panel" id="tribute-preview" style="display:none">
       <h4>⚡ Tribute System</h4>
       <div id="tribute-lines"></div>
@@ -196,7 +191,6 @@ select option { color:#111; background:white; }
   </div>
 
   <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;">
-    <!-- FIX: Back to Lobby no longer re-triggers openPregame -->
     <button class="btn" onclick="closePregame()">← Back to Lobby</button>
     <button class="btn btn-primary" id="btn-start" onclick="hostStart()">▶ Start Game</button>
   </div>
@@ -255,7 +249,6 @@ const SUIT_SYM  = { S:'♠', H:'♥', D:'♦', C:'♣' };
 const SEAT_POS  = ['bottom','left','top','right'];
 const LEVELS    = ['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
 
-// Map seat → player nickname (filled by lobby_update)
 let seatNames = { bottom:'South', left:'West', top:'North', right:'East' };
 
 let mySeat = null;
@@ -269,7 +262,7 @@ let isHost = false;
 let currentSettings = null;
 let mySessionId = null;
 let editTeams = { A: ['bottom','top'], B: ['left','right'] };
-let editPlacements = [];   // ordered list of seats, 1st→4th
+let editPlacements = [];
 let seatToPos = { bottom:'bottom', left:'left', top:'top', right:'right' };
 
 const socket = io();
@@ -285,10 +278,8 @@ socket.on('lobby_update', data => {
   currentSettings = data.settings || {};
   isHost = (data.host_sid === mySessionId);
 
-  // Build seatNames from roster
   data.players.forEach(p => { seatNames[p.seat] = p.nickname; });
 
-  // Update seat slots in lobby
   const filled = {};
   data.players.forEach(p => { filled[p.seat] = p.nickname; });
   SEAT_POS.forEach(seat => {
@@ -305,9 +296,7 @@ socket.on('lobby_update', data => {
   document.getElementById('lobby-status').textContent = `${data.count}/4 players`;
   document.getElementById('lobby-host-btn').style.display = isHost ? 'block' : 'none';
 
-  // Only go back to lobby if we're actually in lobby phase
   const phase = (currentSettings.settings || currentSettings).phase || 'lobby';
-  // Only redirect to lobby if pregame is not currently open
   if (phase === 'lobby' && document.getElementById('pregame').style.display !== 'flex') {
     showLobby();
   }
@@ -322,7 +311,7 @@ socket.on('game_state', state => {
   currentPile  = state.pile || [];
   lastPlaySeat = state.last_play ? state.last_play.seat : null;
   currentSettings = state.settings || {};
-  remapSeatsForTeams(state.settings)
+  remapSeatsForTeams(state.settings);
 
   renderHand(myHand);
   renderOpponents(state.hand_counts, state.finished || []);
@@ -360,7 +349,6 @@ socket.on('tribute_phase', data => {
   if (myTribute) {
     showReturnPicker(myTribute, data.result);
   } else {
-    // Not a receiver — just wait
     setMsg('Waiting for tribute returns…');
   }
 });
@@ -376,14 +364,12 @@ function showLobby() {
 }
 function hideLobby()   { document.getElementById('lobby').style.display = 'none'; }
 
-// FIX: openPregame never goes back to lobby automatically
 function openPregame() {
   document.getElementById('lobby').style.display = 'none';
   document.getElementById('round-over').style.display = 'none';
   const pg = document.getElementById('pregame');
   pg.style.display = 'flex';
 
-  // Populate from currentSettings
   const s = currentSettings || {};
   editTeams = JSON.parse(JSON.stringify(s.teams || { A:['bottom','top'], B:['left','right'] }));
   renderTeamChips();
@@ -404,18 +390,16 @@ function openPregame() {
   }
 }
 
-// FIX: closePregame goes to lobby without triggering lobby_update side effects
 function closePregame() {
   document.getElementById('pregame').style.display = 'none';
   document.getElementById('lobby').style.display = 'flex';
 }
 function hidePregame() { document.getElementById('pregame').style.display = 'none'; }
 
-// ===== TEAM CHIPS — show player names =====
+// ===== TEAM CHIPS =====
 function renderTeamChips() {
   SEAT_POS.forEach(seat => {
     const chip = document.getElementById('chip-' + seat);
-    // FIX: show player name instead of South/West/North/East
     chip.textContent = seatNames[seat] || seat;
     chip.className   = 'seat-chip ' + (editTeams.A.includes(seat) ? 'team-a' : 'team-b');
   });
@@ -434,9 +418,8 @@ function cycleSeat(seat) {
   pushSettings();
 }
 
-// ===== PLACEMENTS — click-to-order buttons =====
+// ===== PLACEMENTS =====
 function renderPlacements() {
-  // Buttons: one per seat, disabled once placed
   const btnRow = document.getElementById('placement-btns');
   btnRow.innerHTML = '';
   SEAT_POS.forEach(seat => {
@@ -448,7 +431,6 @@ function renderPlacements() {
     btnRow.appendChild(btn);
   });
 
-  // Order tags: click to remove
   const orderEl = document.getElementById('place-order');
   orderEl.innerHTML = '';
   const medals = ['🥇','🥈','🥉','4️⃣'];
@@ -484,10 +466,6 @@ function clearPlacements() {
 }
 
 // ===== TRIBUTE PREVIEW =====
-// Guandan tribute rules:
-// - If opposing team gets 1st + 2nd: 1st gives their best 2 cards to 3rd (winner chooses return)
-// - If opposing team gets 1st only (1st + 3rd win): 1st gives 1 card to 3rd
-// - If same team 1st + 2nd: no tribute
 function renderTributePreview() {
   const el    = document.getElementById('tribute-preview');
   const lines = document.getElementById('tribute-lines');
@@ -509,7 +487,6 @@ function renderTributePreview() {
   let rows = [];
 
   if (t1 === t2) {
-    // 双上 — 1st+2nd same team: both 3rd and 4th give
     rows.push('─── <strong>Double Tribute (双上)</strong> ───');
     rows.push(`${nm(p4)} gives their highest card → ${nm(p1)}`);
     rows.push(`${nm(p3)} gives their highest card → ${nm(p2)}`);
@@ -521,7 +498,6 @@ function renderTributePreview() {
     rows.push('⚡ <strong>Exemption check:</strong> If ' + nm(p3) + ' + ' + nm(p4) + ' together hold 2 red jokers → no tribute, ' + nm(p1) + ' leads');
     rows.push('Otherwise: higher-card giver leads (' + nm(p4) + ' leads if cards equal)');
   } else if (t1 === t3) {
-    // 1st+3rd same team: only 4th gives to 1st
     rows.push('─── <strong>Single Tribute</strong> ───');
     rows.push(`${nm(p4)} gives their highest card → ${nm(p1)}`);
     rows.push(`${nm(p1)} returns a card ≤10 (not the level card) → ${nm(p4)}`);
@@ -529,7 +505,6 @@ function renderTributePreview() {
     rows.push('⚡ <strong>Exemption check:</strong> If ' + nm(p2) + ' + ' + nm(p4) + ' together hold 2 red jokers → no tribute, ' + nm(p1) + ' leads');
     rows.push('Otherwise: ' + nm(p4) + ' leads');
   } else {
-    // 1st+4th same team: only 4th gives to 1st (same rule)
     rows.push('─── <strong>Single Tribute</strong> ───');
     rows.push(`${nm(p4)} gives their highest card → ${nm(p1)}`);
     rows.push(`${nm(p1)} returns a card ≤10 (not the level card) → ${nm(p4)}`);
@@ -597,6 +572,7 @@ function makeBack() {
   return el;
 }
 
+// ===== VERTICAL HAND RENDER (updated) =====
 function renderHand(hand) {
   const hb = document.getElementById('hand-bottom');
   hb.innerHTML = '';
@@ -614,28 +590,26 @@ function renderHand(hand) {
     else groups.push({ key, cards: [c] });
   });
 
-  // Render: each group is a tightly-stacked sub-group, groups spaced further apart
-  let xOffset = 0;
-  const CARD_W = 48;
-  const GROUP_GAP = 6;    // visible width between groups
-  const STACK_GAP = 4;    // visible width within same-value stack
+  let yOffset = 0;
+  const CARD_H = 68;
+  const GROUP_GAP = 6;   // visible gap between different-value groups
+  const STACK_GAP = 4;   // overlap gap within same-value group
 
-  groups.forEach((group, gi) => {
+  groups.forEach((group) => {
     group.cards.forEach((c, ci) => {
       const el = makeCard(c, true);
       el.style.position = 'absolute';
-      el.style.left = xOffset + 'px';
-      el.style.bottom = '0';
+      el.style.top = yOffset + 'px';
+      el.style.left = '0';
       el.style.zIndex = ci + 1;
       hb.appendChild(el);
-      xOffset += (ci < group.cards.length - 1) ? STACK_GAP : CARD_W + GROUP_GAP;
+      yOffset += (ci < group.cards.length - 1) ? STACK_GAP : CARD_H + GROUP_GAP;
     });
   });
 
-  // Set container width so it doesn't collapse
-  const totalWidth = xOffset - GROUP_GAP + CARD_W;
-  hb.style.width = totalWidth + 'px';
-  hb.style.height = '68px';
+  const totalHeight = yOffset - GROUP_GAP + CARD_H;
+  hb.style.height = totalHeight + 'px';
+  hb.style.width = '48px';
   hb.style.position = 'relative';
   hb.style.display = 'inline-block';
 }
@@ -643,9 +617,8 @@ function renderHand(hand) {
 function cardSortKey(c) {
   if (c.v === 'RJ') return 200;
   if (c.v === 'BJ') return 199;
-  if (c.v === myLevel && c.s === 'H') return 197; // wild heart: just below other level cards
+  if (c.v === myLevel && c.s === 'H') return 197;
   if (c.v === myLevel) return 198;
-  // 2 is lowest non-special card, then 3..A
   const VALS = ['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
   return VALS.indexOf(c.v) * 4 + ['S','H','D','C'].indexOf(c.s);
 }
@@ -696,7 +669,6 @@ function updateLabels(finished, settings) {
     label.textContent = (seatNames[seat] || seat) + (isDone ? ' ✓' : '');
   });
 
-  // Also update bottom label
   const bottomLabel = document.getElementById('label-bottom');
   if (bottomLabel) {
     const isDone = finished.includes(mySeat);
@@ -730,7 +702,6 @@ function showComboHint() {
 function doPlay() {
   const cards = myHand.filter(c => selected.has(c.v + c.s));
   socket.emit('play_cards', { code: ROOM_CODE, cards });
-  // Don't clear selection — keep highlighted until server confirms
 }
 function doPass() { socket.emit('pass_turn', { code: ROOM_CODE }); }
 function clearSel() {
@@ -778,30 +749,26 @@ function remapSeatsForTeams(settings) {
   const myTeam = Object.entries(teams).find(([,seats]) => seats.includes(mySeat))?.[0];
   if (!myTeam) return;
 
-  // Teammate sits opposite (top), opponents sit left+right
   const teammate = teams[myTeam].find(s => s !== mySeat);
   const opponents = Object.entries(teams)
     .filter(([t]) => t !== myTeam)
     .flatMap(([,seats]) => seats);
 
-  // Remap: bottom=me, top=teammate, left/right=opponents
   seatToPos = {
-    [mySeat]:      'bottom',
-    [teammate]:    'top',
+    [mySeat]:       'bottom',
+    [teammate]:     'top',
     [opponents[0]]: 'left',
     [opponents[1]]: 'right',
   };
 }
 
 function showReturnPicker(tribute, roundResult) {
-  // Show overlay asking player to pick a return card
   const level = myLevel;
   const returnable = myHand.filter(c => {
     const vals = ['3','4','5','6','7','8','9','10'];
     return vals.includes(c.v) && c.v !== level;
   });
 
-  // Create overlay
   const overlay = document.createElement('div');
   overlay.id = 'tribute-return-overlay';
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(10,15,13,0.95);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;z-index:300;';
@@ -825,7 +792,6 @@ function showReturnPicker(tribute, roundResult) {
     el.onclick = () => {
       document.querySelectorAll('#return-card-row .card').forEach(x => x.style.outline = '');
       el.style.outline = '2px solid #f9a825';
-      // Confirm button
       let btn = document.getElementById('confirm-return-btn');
       if (!btn) {
         btn = document.createElement('button');
