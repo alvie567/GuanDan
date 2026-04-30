@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>掼蛋 · {{ room_code }}</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #0a0f0d; font-family: 'Segoe UI', sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; color: white; }
+h1 { color: #f9a825; letter-spacing: 4px; font-size: 20px; margin-bottom: 4px; }
+.room-info { color: rgba(255,255,255,0.35); font-size: 12px; margin-bottom: 14px; letter-spacing: 2px; }
+.room-code-badge { color: #f9a825; font-weight: 700; letter-spacing: 4px; cursor:pointer; }
+
+/* LOBBY */
+#lobby { position:fixed; inset:0; background:rgba(10,15,13,0.97); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; z-index:100; padding:20px; }
+#lobby h2 { color:#f9a825; font-size:20px; letter-spacing:3px; }
+.code-box { background:rgba(255,255,255,0.05); border:1px solid rgba(249,168,37,0.3); border-radius:12px; padding:14px 28px; font-size:28px; font-weight:700; letter-spacing:8px; cursor:pointer; position:relative; }
+.code-box::after { content:'click to copy'; position:absolute; bottom:-18px; left:50%; transform:translateX(-50%); font-size:10px; color:rgba(255,255,255,0.25); font-weight:400; letter-spacing:1px; }
+.seats-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; width:300px; }
+.seat-slot { background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:10px 14px; }
+.seat-slot.filled { border-color:rgba(249,168,37,0.3); background:rgba(249,168,37,0.06); }
+.seat-slot .sl { font-size:10px; color:rgba(255,255,255,0.3); letter-spacing:1px; text-transform:uppercase; }
+.seat-slot .sn { font-size:14px; font-weight:600; }
+.seat-slot.empty .sn { color:rgba(255,255,255,0.2); font-style:italic; font-weight:400; }
+.waiting { color:rgba(255,255,255,0.4); font-size:13px; }
+
+/* PREGAME */
+#pregame { position:fixed; inset:0; background:rgba(10,15,13,0.97); display:none; flex-direction:column; align-items:center; justify-content:flex-start; gap:14px; z-index:100; padding:30px 20px; overflow-y:auto; }
+#pregame h2 { color:#f9a825; font-size:18px; letter-spacing:2px; }
+.panel { background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:16px; width:100%; max-width:480px; }
+.panel h3 { font-size:12px; color:rgba(255,255,255,0.4); text-transform:uppercase; letter-spacing:2px; margin-bottom:12px; }
+.team-row { display:flex; gap:8px; align-items:center; margin-bottom:8px; flex-wrap:wrap; }
+.team-label { font-size:13px; font-weight:600; width:60px; }
+.team-a-label { color:#90caf9; }
+.team-b-label { color:#ef9a9a; }
+.seat-chip { padding:5px 12px; border-radius:20px; font-size:12px; font-weight:600; cursor:pointer; border:1px solid rgba(255,255,255,0.15); background:rgba(255,255,255,0.06); color:rgba(255,255,255,0.6); transition:all 0.15s; user-select:none; }
+.seat-chip.team-a { background:rgba(100,181,246,0.15); color:#90caf9; border-color:rgba(100,181,246,0.3); }
+.seat-chip.team-b { background:rgba(239,154,154,0.15); color:#ef9a9a; border-color:rgba(239,154,154,0.3); }
+.level-row { display:flex; gap:10px; align-items:center; margin-bottom:8px; }
+.level-row label { font-size:13px; width:70px; }
+select { background:white; border:1px solid rgba(255,255,255,0.15); color:#1a1a1a; border-radius:8px; padding:6px 10px; font-size:13px; font-family:inherit; outline:none; }
+
+/* Placements */
+.placement-order { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px; }
+.place-slot { display:flex; flex-direction:column; align-items:center; gap:3px; }
+.place-num-label { font-size:10px; color:rgba(255,255,255,0.3); }
+.place-chip { padding:5px 10px; border-radius:8px; font-size:12px; font-weight:600; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1); color:rgba(255,255,255,0.5); min-width:60px; text-align:center; }
+.place-chip.set { background:rgba(249,168,37,0.12); border-color:rgba(249,168,37,0.3); color:#f9a825; }
+.placement-btns-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+.place-btn { padding:7px 10px; border-radius:8px; font-size:12px; font-weight:600; cursor:pointer; border:1px solid rgba(255,255,255,0.12); background:rgba(255,255,255,0.05); color:rgba(255,255,255,0.7); font-family:inherit; transition:all 0.15s; text-align:left; }
+.place-btn:hover { background:rgba(255,255,255,0.1); }
+.place-btn.team-a-btn { border-color:rgba(100,181,246,0.3); color:#90caf9; }
+.place-btn.team-b-btn { border-color:rgba(239,154,154,0.3); color:#ef9a9a; }
+
+/* Tribute overlay */
+#tribute-overlay { position:fixed; inset:0; background:rgba(10,15,13,0.95); display:none; flex-direction:column; align-items:center; justify-content:center; gap:16px; z-index:250; padding:20px; }
+#tribute-overlay h2 { color:#f9a825; font-size:20px; letter-spacing:2px; }
+.tribute-info { color:rgba(255,255,255,0.6); font-size:14px; text-align:center; max-width:380px; line-height:1.6; }
+.tribute-hand { display:flex; gap:4px; flex-wrap:wrap; justify-content:center; margin:8px 0; }
+.tribute-card { width:44px; height:62px; border-radius:6px; background:white; border:2px solid #ddd; display:flex; flex-direction:column; align-items:center; justify-content:center; cursor:pointer; font-family:Georgia,serif; font-weight:700; transition:transform 0.12s,box-shadow 0.12s; }
+.tribute-card.red { color:#c62828; }
+.tribute-card.black { color:#1a1a2e; }
+.tribute-card:hover { transform:translateY(-8px); box-shadow:0 6px 16px rgba(0,0,0,0.4); }
+.tribute-card.selected { transform:translateY(-12px); outline:2px solid #f9a825; background:#fffde7; }
+
+.btn { padding:10px 22px; border-radius:9px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit; transition:all 0.15s; border:1px solid rgba(255,255,255,0.15); background:rgba(255,255,255,0.07); color:rgba(255,255,255,0.85); }
+.btn:hover:not(:disabled) { background:rgba(255,255,255,0.12); }
+.btn:disabled { opacity:0.35; cursor:not-allowed; }
+.btn-primary { background:#f9a825; color:#3e2000; font-weight:700; border-color:#f9a825; }
+.btn-primary:hover:not(:disabled) { background:#fbc02d; }
+.btn-danger { background:rgba(239,83,80,0.15); color:#ef9a9a; border-color:rgba(239,83,80,0.3); }
+#pregame-waiting { color:rgba(255,255,255,0.35); font-size:13px; }
+
+/* GAME TABLE */
+.table { position:relative; width:min(700px,100%); height:520px; background:#1b5e20; border-radius:50%/38%; border:8px solid #2e7d32; box-shadow:0 0 0 3px #1b5e20,0 20px 60px rgba(0,0,0,0.7); display:flex; align-items:center; justify-content:center; }
+.player { position:absolute; display:flex; flex-direction:column; align-items:center; gap:5px; }
+.player.top { top:12px; left:50%; transform:translateX(-50%); }
+.player.bottom { bottom:8px; left:50%; transform:translateX(-50%); }
+.player.left { left:8px; top:50%; transform:translateY(-50%); }
+.player.right { right:8px; top:50%; transform:translateY(-50%); }
+.plabel { color:rgba(255,255,255,0.8); font-size:11px; font-weight:500; background:rgba(0,0,0,0.35); padding:3px 9px; border-radius:20px; white-space:nowrap; }
+.plabel.active { color:#f9a825; background:rgba(249,168,37,0.2); border:1px solid rgba(249,168,37,0.4); }
+.plabel.finished { color:#a5d6a7; background:rgba(76,175,80,0.15); }
+.badges { display:flex; gap:3px; flex-wrap:wrap; justify-content:center; }
+.badge { font-size:10px; padding:1px 7px; border-radius:20px; }
+.team-a-badge { background:rgba(100,181,246,0.2); color:#90caf9; border:1px solid rgba(100,181,246,0.3); }
+.team-b-badge { background:rgba(239,154,154,0.2); color:#ef9a9a; border:1px solid rgba(239,154,154,0.3); }
+.lv-badge { background:#f9a825; color:#3e2000; font-weight:700; }
+.hand { position:relative; display:flex; }
+.hand.h { flex-direction:row; align-items:flex-end; }
+.hand.v { flex-direction:column; align-items:center; }
+#hand-bottom { min-height:68px; }
+.card { width:48px; height:68px; border-radius:6px; background:white; border:1.5px solid #ddd; cursor:pointer; transition:box-shadow 0.12s; position:relative; user-select:none; font-family:Georgia,serif; flex-shrink:0; }
+.card.red { color:#c62828; }
+.card.black { color:#1a1a2e; }
+.card.wild { background:#fffde7; outline:2px solid #f9a825; }
+.card.selected { box-shadow:0 0 0 2px #f9a825, 0 0 12px rgba(249,168,37,0.4); background:#fffde7; z-index:20; }
+.card:hover:not(.selected) { box-shadow:0 0 0 2px rgba(249,168,37,0.5); z-index:10; }
+.card .val { position:absolute; top:4px; left:5px; font-size:13px; font-weight:700; line-height:1; }
+.card .suit { position:absolute; top:4px; right:5px; font-size:11px; line-height:1; }
+.hand.v .card+.card { margin-top:-50px; }
+.card-back { width:36px; height:50px; border-radius:5px; background:linear-gradient(135deg,#1a237e,#283593); border:1.5px solid #3949ab; display:flex; align-items:center; justify-content:center; }
+.card-back-inner { width:24px; height:36px; border:1.5px solid rgba(255,255,255,0.2); border-radius:3px; }
+.hand.h .card-back+.card-back { margin-left:-16px; }
+.hand.v .card-back+.card-back { margin-top:-36px; }
+.pile { background:transparent; border:none; width:220px; height:115px; display:flex; align-items:center; justify-content:center; }
+.pile-cards { display:flex; align-items:center; justify-content:center; flex-wrap:wrap; max-width:220px; }
+.pile-cards .card { width:38px; height:54px; cursor:default; flex-shrink:0; }
+.pile-cards .card:hover { box-shadow:none; }
+.pile-cards .card+.card { margin-left:-10px; }
+.pile-empty { display:none; }
+.controls { margin-top:14px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:center; }
+.msg { color:rgba(255,255,255,0.55); font-size:13px; margin-top:8px; height:18px; text-align:center; }
+.combo-hint { color:#f9a825; font-size:11px; margin-top:4px; height:14px; text-align:center; letter-spacing:0.5px; }
+
+/* ROUND OVER */
+#round-over { position:fixed; inset:0; background:rgba(10,15,13,0.92); display:none; flex-direction:column; align-items:center; justify-content:center; gap:16px; z-index:200; }
+#round-over h2 { color:#f9a825; font-size:24px; letter-spacing:3px; }
+.placements { display:flex; flex-direction:column; gap:8px; }
+.placement-row { display:flex; align-items:center; gap:12px; font-size:15px; }
+.place-num { font-size:22px; font-weight:700; color:#f9a825; width:32px; }
+.upgrade-info { color:#a5d6a7; font-size:14px; }
+
+#copied-toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#f9a825; color:#3e2000; font-weight:700; padding:7px 18px; border-radius:20px; font-size:13px; opacity:0; transition:opacity 0.2s; pointer-events:none; z-index:300; }
+#copied-toast.show { opacity:1; }
+</style>
+</head>
+<body>
+<h1>掼蛋 Guandan</h1>
+<div class="room-info">Room <span class="room-code-badge" onclick="copyCode()">{{ room_code }}</span> · {{ nickname }}</div>
+
+<!-- LOBBY -->
+<div id="lobby">
+  <h2>Waiting for Players</h2>
+  <div class="code-box" onclick="copyCode()">{{ room_code }}</div>
+  <div class="seats-grid" id="seats-grid">
+    <div class="seat-slot empty" id="slot-bottom"><div class="sl">South (You)</div><div class="sn">Empty</div></div>
+    <div class="seat-slot empty" id="slot-left"><div class="sl">West</div><div class="sn">Empty</div></div>
+    <div class="seat-slot empty" id="slot-top"><div class="sl">North</div><div class="sn">Empty</div></div>
+    <div class="seat-slot empty" id="slot-right"><div class="sl">East</div><div class="sn">Empty</div></div>
+  </div>
+  <div class="waiting" id="lobby-status">Waiting for players…</div>
+  <div id="lobby-host-btn" style="display:none">
+    <button class="btn btn-primary" onclick="openPregame()">⚙ Configure &amp; Start</button>
+  </div>
+</div>
+
+<!-- PREGAME -->
+<div id="pregame">
+  <h2>Game Settings</h2>
+
+  <div class="panel">
+    <h3>Teams — click a name to switch sides</h3>
+    <div class="team-row">
+      <span class="team-label team-a-label">Team A</span>
+      <span class="seat-chip" id="chip-bottom" onclick="cycleSeat('bottom')">…</span>
+      <span class="seat-chip" id="chip-left"   onclick="cycleSeat('left')">…</span>
+      <span class="seat-chip" id="chip-top"    onclick="cycleSeat('top')">…</span>
+      <span class="seat-chip" id="chip-right"  onclick="cycleSeat('right')">…</span>
+    </div>
+    <div style="font-size:11px;color:rgba(255,255,255,0.3);margin-top:4px;">Blue = Team A · Red = Team B</div>
+  </div>
+
+  <div class="panel">
+    <h3>Starting Levels</h3>
+    <div class="level-row">
+      <label class="team-a-label">Team A</label>
+      <select id="level-a" onchange="pushSettings()">
+        <option>2</option><option>3</option><option>4</option><option>5</option>
+        <option>6</option><option>7</option><option>8</option><option>9</option>
+        <option>10</option><option>J</option><option>Q</option><option>K</option><option>A</option>
+      </select>
+    </div>
+    <div class="level-row">
+      <label class="team-b-label">Team B</label>
+      <select id="level-b" onchange="pushSettings()">
+        <option>2</option><option>3</option><option>4</option><option>5</option>
+        <option>6</option><option>7</option><option>8</option><option>9</option>
+        <option>10</option><option>J</option><option>Q</option><option>K</option><option>A</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>Previous Round Placements (optional)</h3>
+    <div class="placement-order" id="placement-order">
+      <div class="place-slot"><div class="place-num-label">1st</div><div class="place-chip" id="place-0">—</div></div>
+      <div class="place-slot"><div class="place-num-label">2nd</div><div class="place-chip" id="place-1">—</div></div>
+      <div class="place-slot"><div class="place-num-label">3rd</div><div class="place-chip" id="place-2">—</div></div>
+      <div class="place-slot"><div class="place-num-label">4th</div><div class="place-chip" id="place-3">—</div></div>
+    </div>
+    <div style="font-size:11px;color:rgba(255,255,255,0.3);margin-bottom:10px;">Quick set — common outcomes:</div>
+    <div class="placement-btns-grid" id="placement-btns-grid">
+      <!-- filled dynamically based on player names -->
+    </div>
+    <div style="margin-top:8px;">
+      <button class="btn" style="font-size:12px;padding:6px 14px;" onclick="clearPlacements()">✕ Clear</button>
+    </div>
+  </div>
+
+  <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;">
+    <button class="btn" onclick="closePregame()">← Back to Lobby</button>
+    <button class="btn btn-primary" id="btn-start" onclick="hostStart()">▶ Start Game</button>
+  </div>
+  <div id="pregame-waiting" style="display:none">Waiting for host to start…</div>
+</div>
+
+<!-- GAME TABLE -->
+<div class="table" id="table">
+  <div class="player top" id="p-top">
+    <div class="badges" id="badges-top"><span class="badge lv-badge">Lv2</span><span class="badge team-a-badge">A</span></div>
+    <div class="hand h" id="hand-top"></div>
+    <div class="plabel" id="label-top">North</div>
+  </div>
+  <div class="player left" id="p-left">
+    <div class="badges" id="badges-left"><span class="badge lv-badge">Lv2</span><span class="badge team-a-badge">A</span></div>
+    <div class="hand v" id="hand-left"></div>
+    <div class="plabel" id="label-left">West</div>
+  </div>
+  <div class="pile" id="pile"><div class="pile-empty">No cards played yet</div></div>
+  <div class="player right" id="p-right">
+    <div class="badges" id="badges-right"><span class="badge lv-badge">Lv2</span><span class="badge team-b-badge">B</span></div>
+    <div class="hand v" id="hand-right"></div>
+    <div class="plabel" id="label-right">East</div>
+  </div>
+  <div class="player bottom" id="p-bottom">
+    <div class="plabel active" id="label-bottom">You (South)</div>
+    <div class="badges" id="badges-bottom"><span class="badge lv-badge">Lv2</span><span class="badge team-a-badge">A</span></div>
+    <div class="hand h" id="hand-bottom"></div>
+  </div>
+</div>
+
+<div class="msg" id="msg">Connecting…</div>
+<div class="combo-hint" id="combo-hint"></div>
+<div class="controls">
+  <button class="btn" onclick="doPass()" id="btn-pass" disabled>Pass</button>
+  <button class="btn btn-primary" onclick="doPlay()" id="btn-play" disabled>Play</button>
+  <button class="btn" onclick="clearSel()" id="btn-clear" disabled>Clear</button>
+  <button class="btn btn-danger" onclick="openPregame()" id="btn-config" style="display:none">⚙ Settings</button>
+</div>
+
+<!-- TRIBUTE OVERLAY -->
+<div id="tribute-overlay">
+  <h2>Tribute</h2>
+  <div class="tribute-info" id="tribute-info"></div>
+  <div class="tribute-hand" id="tribute-hand"></div>
+  <button class="btn btn-primary" id="btn-tribute-send" onclick="sendTribute()" disabled>Send Card</button>
+</div>
+
+<!-- ROUND OVER -->
+<div id="round-over">
+  <h2>Round Over</h2>
+  <div class="placements" id="round-placements"></div>
+  <div class="upgrade-info" id="upgrade-info"></div>
+  <div id="win-banner" style="display:none;color:#f9a825;font-size:20px;font-weight:700;"></div>
+  <div style="display:flex;gap:10px;margin-top:8px;">
+    <button class="btn btn-primary" id="btn-next-round" onclick="openPregame()" style="display:none">⚙ Next Round</button>
+    <div id="round-over-waiting" style="color:rgba(255,255,255,0.35);font-size:13px;display:none">Waiting for host to start next round…</div>
+  </div>
+</div>
+
+<div id="copied-toast">Copied!</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.6.1/socket.io.min.js"></script>
+<script>
+const ROOM_CODE = "{{ room_code }}";
+const MY_NICK   = "{{ nickname }}";
+const SUIT_SYM  = { S:'♠', H:'♥', D:'♦', C:'♣' };
+const SEAT_DIRS = { bottom:'South', left:'West', top:'North', right:'East' };
+const LEVELS    = ['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
+
+let mySeat = null, myHand = [], selected = new Set();
+let activeSeat = null, myLevel = '2', currentPile = [];
+let isHost = false, currentSettings = null, mySessionId = null;
+let editTeams = { A:['bottom','top'], B:['left','right'] };
+let editPlacements = [];
+
+// Map seat → player nickname (populated from lobby_update)
+let seatNames = { bottom:'South', left:'West', top:'North', right:'East' };
+
+// Tribute state
+let tributeMode = false, tributeSelected = null, tributeTarget = null, tributeCount = 1;
+
+const socket = io();
+
+socket.on('connect', () => {
+  mySessionId = socket.id;
+  socket.emit('join_game', { code: ROOM_CODE, nickname: MY_NICK });
+});
+
+socket.on('error', d => setMsg('⚠ ' + d.msg));
+
+socket.on('lobby_update', data => {
+  currentSettings = data.settings || {};
+  isHost = (data.host_sid === mySessionId);
+
+  // Update seat name map
+  data.players.forEach(p => { seatNames[p.seat] = p.nickname; });
+
+  // Update lobby slots
+  const filled = {};
+  data.players.forEach(p => { filled[p.seat] = p.nickname; });
+  ['bottom','left','top','right'].forEach(seat => {
+    const el = document.getElementById('slot-' + seat);
+    if (filled[seat]) {
+      el.classList.remove('empty'); el.classList.add('filled');
+      el.querySelector('.sn').textContent = filled[seat];
+    } else {
+      el.classList.remove('filled'); el.classList.add('empty');
+      el.querySelector('.sn').textContent = 'Empty';
+      seatNames[seat] = SEAT_DIRS[seat];
+    }
+  });
+
+  document.getElementById('lobby-status').textContent = `${data.count}/4 players`;
+  document.getElementById('lobby-host-btn').style.display = isHost ? 'block' : 'none';
+
+  if ((currentSettings.phase || 'lobby') === 'lobby') showLobby();
+});
+
+socket.on('game_state', state => {
+  hideLobby(); hidePregame(); hideRoundOver(); hideTribute();
+  mySeat = state.your_seat;
+  myHand = state.hand;
+  activeSeat = state.active_seat;
+  myLevel = state.level || '2';
+  currentPile = state.pile || [];
+  currentSettings = state.settings || {};
+
+  renderHand(myHand);
+  renderOpponents(state.hand_counts, state.finished || []);
+  renderPile(state.pile);
+  updateLabels(state.finished || [], state.settings);
+  updateBtns();
+
+  document.getElementById('btn-config').style.display = isHost ? 'inline-block' : 'none';
+
+  if (activeSeat === mySeat) setMsg('Your turn — select cards to play');
+  else setMsg(playerName(activeSeat) + ' is thinking…');
+});
+
+socket.on('player_passed', d => setMsg(playerName(d.seat) + ' passed'));
+socket.on('player_left',   d => setMsg(playerName(d.seat) + ' left the room'));
+
+socket.on('round_over', result => showRoundOver(result));
+
+// Tribute events from server
+socket.on('tribute_request', data => {
+  // data: { from_seat, to_seat, count, exempt }
+  if (data.exempt) {
+    setMsg('You are exempt from tribute (two red jokers)!');
+    return;
+  }
+  if (data.from_seat === mySeat) {
+    showTribute(data);
+  } else if (data.to_seat === mySeat) {
+    setMsg(`Waiting for tribute from ${playerName(data.from_seat)}…`);
+  }
+});
+
+socket.on('tribute_return', data => {
+  // 1st place returns a card to tribute giver
+  if (data.to_seat === mySeat) {
+    showTributeReturn(data);
+  }
+});
+
+socket.on('tribute_done', () => {
+  hideTribute();
+  setMsg('Tribute complete — game continues');
+});
+
+// ===== LOBBY =====
+function showLobby() {
+  document.getElementById('lobby').style.display = 'flex';
+  document.getElementById('pregame').style.display = 'none';
+}
+function hideLobby() { document.getElementById('lobby').style.display = 'none'; }
+
+function openPregame() {
+  document.getElementById('lobby').style.display = 'none';
+  document.getElementById('round-over').style.display = 'none';
+  document.getElementById('pregame').style.display = 'flex';
+
+  const s = currentSettings || {};
+  editTeams = JSON.parse(JSON.stringify(s.teams || { A:['bottom','top'], B:['left','right'] }));
+  renderTeamChips();
+
+  const lv = s.levels || { A:'2', B:'2' };
+  document.getElementById('level-a').value = lv.A || '2';
+  document.getElementById('level-b').value = lv.B || '2';
+
+  renderPlacements(s.last_placements || []);
+  renderPlacementButtons();
+
+  if (isHost) {
+    document.getElementById('btn-start').style.display = 'inline-block';
+    document.getElementById('pregame-waiting').style.display = 'none';
+  } else {
+    document.getElementById('btn-start').style.display = 'none';
+    document.getElementById('pregame-waiting').style.display = 'block';
+  }
+}
+
+function closePregame() {
+  document.getElementById('pregame').style.display = 'none';
+  document.getElementById('lobby').style.display = 'flex';
+}
+function hidePregame() { document.getElementById('pregame').style.display = 'none'; }
+
+// ===== TEAM CHIPS — show player names not directions =====
+function renderTeamChips() {
+  ['bottom','left','top','right'].forEach(seat => {
+    const chip = document.getElementById('chip-' + seat);
+    chip.textContent = seatNames[seat] || SEAT_DIRS[seat];
+    chip.className = 'seat-chip ' + (editTeams.A.includes(seat) ? 'team-a' : 'team-b');
+  });
+}
+
+function cycleSeat(seat) {
+  if (!isHost) return;
+  if (editTeams.A.includes(seat)) {
+    editTeams.A = editTeams.A.filter(s => s !== seat);
+    editTeams.B.push(seat);
+  } else {
+    editTeams.B = editTeams.B.filter(s => s !== seat);
+    editTeams.A.push(seat);
+  }
+  renderTeamChips();
+  pushSettings();
+}
+
+// ===== PLACEMENTS =====
+function renderPlacements(placements) {
+  editPlacements = placements || [];
+  ['0','1','2','3'].forEach((i) => {
+    const el = document.getElementById('place-' + i);
+    const seat = editPlacements[i];
+    if (seat) {
+      el.textContent = seatNames[seat] || SEAT_DIRS[seat];
+      el.classList.add('set');
+    } else {
+      el.textContent = '—';
+      el.classList.remove('set');
+    }
+  });
+}
+
+function renderPlacementButtons() {
+  // Generate quick-set buttons: Team A 1&2, Team B 1&2, Team A 1&3, Team B 1&3
+  const grid = document.getElementById('placement-btns-grid');
+  const seats = ['bottom','left','top','right'];
+  const teamA = editTeams.A;
+  const teamB = editTeams.B;
+
+  const presets = [
+    { label: `Team A: 1st & 2nd`, order: [...teamA, ...teamB], cls:'team-a-btn' },
+    { label: `Team B: 1st & 2nd`, order: [...teamB, ...teamA], cls:'team-b-btn' },
+    { label: `Team A: 1st & 3rd`, order: [teamA[0], teamB[0], teamA[1], teamB[1]], cls:'team-a-btn' },
+    { label: `Team B: 1st & 3rd`, order: [teamB[0], teamA[0], teamB[1], teamA[1]], cls:'team-b-btn' },
+  ];
+
+  grid.innerHTML = presets.map((p,i) =>
+    `<button class="place-btn ${p.cls}" onclick='applyPreset(${JSON.stringify(p.order)})'>${p.label}</button>`
+  ).join('');
+}
+
+function applyPreset(order) {
+  editPlacements = order.filter(Boolean).slice(0,4);
+  renderPlacements(editPlacements);
+  pushSettings();
+}
+
+function clearPlacements() {
+  editPlacements = [];
+  renderPlacements([]);
+  pushSettings();
+}
+
+function pushSettings() {
+  if (!isHost) return;
+  socket.emit('update_settings', {
+    code: ROOM_CODE,
+    teams: editTeams,
+    levels: {
+      A: document.getElementById('level-a').value,
+      B: document.getElementById('level-b').value,
+    },
+    last_placements: editPlacements,
+  });
+  // Re-render placement buttons in case teams changed
+  renderPlacementButtons();
+}
+
+function hostStart() {
+  pushSettings();
+  setTimeout(() => socket.emit('host_start_game', { code: ROOM_CODE }), 200);
+}
+
+// ===== TRIBUTE UI =====
+function showTribute(data) {
+  tributeMode = true;
+  tributeSelected = null;
+  tributeTarget = data.to_seat;
+  tributeCount = data.count || 1;
+
+  document.getElementById('tribute-info').innerHTML =
+    `You finished <b>last</b> — give your highest non-wild card${tributeCount > 1 ? 's (' + tributeCount + ')' : ''} to <b>${playerName(data.to_seat)}</b>.`;
+
+  const hand = document.getElementById('tribute-hand');
+  hand.innerHTML = '';
+
+  // Show hand sorted, highlight the highest non-wild card(s) automatically
+  const sorted = [...myHand].sort((a,b) => cardSortKey(b) - cardSortKey(a));
+  sorted.forEach(card => {
+    const el = makeTributeCard(card);
+    hand.appendChild(el);
+  });
+
+  document.getElementById('tribute-overlay').style.display = 'flex';
+  document.getElementById('btn-tribute-send').disabled = true;
+}
+
+function showTributeReturn(data) {
+  tributeMode = true;
+  tributeSelected = null;
+  tributeTarget = data.to_seat;
+  tributeCount = 1;
+
+  document.getElementById('tribute-info').innerHTML =
+    `Return a small card to <b>${playerName(data.to_seat)}</b>.`;
+
+  const hand = document.getElementById('tribute-hand');
+  hand.innerHTML = '';
+  const sorted = [...myHand].sort((a,b) => cardSortKey(a) - cardSortKey(b));
+  sorted.forEach(card => {
+    const el = makeTributeCard(card);
+    hand.appendChild(el);
+  });
+
+  document.getElementById('tribute-overlay').style.display = 'flex';
+  document.getElementById('btn-tribute-send').disabled = true;
+}
+
+function makeTributeCard(card) {
+  const el = document.createElement('div');
+  el.className = 'tribute-card ' + (isRed(card) ? 'red' : 'black');
+  const suit = SUIT_SYM[card.s] || '';
+  el.innerHTML = `<span style="font-size:13px">${card.v}</span>${card.s ? `<span style="font-size:10px">${suit}</span>` : ''}`;
+  el.onclick = () => {
+    document.querySelectorAll('.tribute-card').forEach(c => c.classList.remove('selected'));
+    el.classList.add('selected');
+    tributeSelected = card;
+    document.getElementById('btn-tribute-send').disabled = false;
+  };
+  return el;
+}
+
+function sendTribute() {
+  if (!tributeSelected) return;
+  socket.emit('tribute_card', {
+    code: ROOM_CODE,
+    card: tributeSelected,
+    to_seat: tributeTarget,
+  });
+  hideTribute();
+}
+
+function hideTribute() {
+  document.getElementById('tribute-overlay').style.display = 'none';
+  tributeMode = false;
+}
+
+// ===== RENDER =====
+function playerName(seat) {
+  return seatNames[seat] || SEAT_DIRS[seat] || seat;
+}
+
+function isRed(c) { return c.v === 'RJ' || c.s === 'H' || c.s === 'D'; }
+
+function makeCard(card, selectable) {
+  const el = document.createElement('div');
+  const joker = card.v === 'BJ' || card.v === 'RJ';
+  const wild = card.v === myLevel && card.s === 'H';
+  el.className = 'card ' + (isRed(card) ? 'red' : 'black') + (wild ? ' wild' : '');
+  const suit = SUIT_SYM[card.s] || '';
+  el.innerHTML = `<span class="val">${card.v}</span>${!joker ? `<span class="suit">${suit}</span>` : ''}`;
+  el.dataset.id = card.v + card.s;
+  if (selectable) {
+    el.onclick = () => {
+      if (activeSeat !== mySeat) return;
+      el.classList.toggle('selected');
+      if (el.classList.contains('selected')) selected.add(el.dataset.id);
+      else selected.delete(el.dataset.id);
+      updateBtns(); showComboHint();
+    };
+  }
+  return el;
+}
+
+function makeBack() {
+  const el = document.createElement('div');
+  el.className = 'card-back';
+  el.innerHTML = `<div class="card-back-inner"></div>`;
+  return el;
+}
+
+function renderHand(hand) {
+  const hb = document.getElementById('hand-bottom');
+  hb.innerHTML = '';
+  selected.clear();
+
+  const sorted = [...hand].sort((a, b) => cardSortKey(a) - cardSortKey(b));
+
+  // Group same-value cards (wild heart stays separate)
+  const groups = [];
+  sorted.forEach(c => {
+    const key = (c.v === myLevel && c.s === 'H') ? '__wild__' : c.v;
+    const last = groups[groups.length - 1];
+    if (last && last.key === key) last.cards.push(c);
+    else groups.push({ key, cards: [c] });
+  });
+
+  // Absolute positioning: tight stack within group, bigger gap between groups
+  let xOffset = 0;
+  const CARD_W = 48;
+  const GROUP_GAP = 6;
+  const STACK_GAP = 4;
+
+  groups.forEach(group => {
+    group.cards.forEach((c, ci) => {
+      const el = makeCard(c, true);
+      el.style.position = 'absolute';
+      el.style.left = xOffset + 'px';
+      el.style.bottom = '0';
+      el.style.zIndex = ci + 1;
+      hb.appendChild(el);
+      xOffset += (ci < group.cards.length - 1) ? STACK_GAP : CARD_W + GROUP_GAP;
+    });
+  });
+
+  const totalWidth = xOffset - GROUP_GAP;
+  hb.style.width = (totalWidth > 0 ? totalWidth : CARD_W) + 'px';
+  hb.style.height = '68px';
+  hb.style.position = 'relative';
+  hb.style.display = 'inline-block';
+}
+
+function cardSortKey(c) {
+  if (c.v === 'RJ') return 200;
+  if (c.v === 'BJ') return 199;
+  if (c.v === myLevel && c.s === 'H') return 197; // wild heart just below other level cards
+  if (c.v === myLevel) return 198;
+  // 2 is lowest non-special, then 3..A ascending
+  const VALS = ['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
+  return VALS.indexOf(c.v) * 4 + ['S','H','D','C'].indexOf(c.s);
+}
+
+function renderOpponents(counts, finished) {
+  const order = ['bottom','left','top','right'];
+  const myIdx = mySeat ? order.indexOf(mySeat) : 0;
+  const rel = { left: order[(myIdx+1)%4], top: order[(myIdx+2)%4], right: order[(myIdx+3)%4] };
+  ['left','top','right'].forEach(pos => {
+    const seat = rel[pos];
+    const count = counts ? (counts[seat] || 0) : 0;
+    const hel = document.getElementById('hand-' + pos);
+    hel.innerHTML = '';
+    const badge = document.createElement('div');
+    badge.style.cssText = 'background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.2);border-radius:20px;padding:4px 14px;font-size:14px;font-weight:700;color:rgba(255,255,255,0.85);white-space:nowrap;';
+    badge.textContent = finished.includes(seat) ? '✓' : count + ' cards';
+    hel.appendChild(badge);
+  });
+}
+
+function renderPile(cards) {
+  const pile = document.getElementById('pile');
+  if (!cards || !cards.length) { pile.innerHTML = ''; return; }
+  const row = document.createElement('div'); row.className = 'pile-cards';
+  cards.forEach(c => row.appendChild(makeCard(c, false)));
+  pile.innerHTML = '';
+  pile.appendChild(row);
+}
+
+function updateLabels(finished, settings) {
+  if (!mySeat) return;
+  const order = ['bottom','left','top','right'];
+  const myIdx = order.indexOf(mySeat);
+  const rel = {
+    bottom: mySeat,
+    left:   order[(myIdx+1)%4],
+    top:    order[(myIdx+2)%4],
+    right:  order[(myIdx+3)%4],
+  };
+  const teams  = (settings && settings.teams)  || { A:['bottom','top'], B:['left','right'] };
+  const levels = (settings && settings.levels) || { A:'2', B:'2' };
+
+  Object.entries(rel).forEach(([pos, seat]) => {
+    const label   = document.getElementById('label-' + pos);
+    const badgeEl = document.getElementById('badges-' + pos);
+    const isActive = seat === activeSeat;
+    const isDone   = finished.includes(seat);
+    label.className = 'plabel' + (isActive ? ' active' : '') + (isDone ? ' finished' : '');
+    label.textContent = playerName(seat) + (pos === 'bottom' ? ' (You)' : '');
+
+    const team      = Object.entries(teams).find(([t,ss]) => ss.includes(seat));
+    const teamName  = team ? team[0] : 'A';
+    const teamLevel = levels[teamName] || '2';
+    const teamClass = teamName === 'A' ? 'team-a-badge' : 'team-b-badge';
+    const finBadge  = isDone ? `<span class="badge" style="background:rgba(76,175,80,0.2);color:#a5d6a7;border:1px solid rgba(76,175,80,0.3)">✓</span>` : '';
+    badgeEl.innerHTML = `<span class="badge lv-badge">Lv${teamLevel}</span><span class="badge ${teamClass}">Team ${teamName}</span>${finBadge}`;
+  });
+}
+
+function updateBtns() {
+  const myTurn = activeSeat === mySeat;
+  document.getElementById('btn-play').disabled  = selected.size === 0 || !myTurn;
+  document.getElementById('btn-clear').disabled  = selected.size === 0;
+  document.getElementById('btn-pass').disabled   = !myTurn || currentPile.length === 0;
+  document.getElementById('btn-play').textContent = selected.size > 0 ? `Play (${selected.size})` : 'Play';
+}
+
+function showComboHint() {
+  const hint = document.getElementById('combo-hint');
+  const n = selected.size;
+  if (!n) { hint.textContent = ''; return; }
+  const labels = ['','Single','Pair?','Triple?','4-card Bomb?','Straight / Full House / SF?','Tube / Plate / 6-Bomb?','7-Bomb?','8-Bomb?'];
+  hint.textContent = labels[n] || `${n} cards`;
+}
+
+// ===== ACTIONS =====
+function doPlay() {
+  const cards = myHand.filter(c => selected.has(c.v + c.s));
+  socket.emit('play_cards', { code: ROOM_CODE, cards });
+  selected.clear();
+  document.getElementById('combo-hint').textContent = '';
+}
+function doPass() { socket.emit('pass_turn', { code: ROOM_CODE }); }
+function clearSel() {
+  selected.clear();
+  document.querySelectorAll('#hand-bottom .card').forEach(c => c.classList.remove('selected'));
+  updateBtns();
+  document.getElementById('combo-hint').textContent = '';
+}
+
+// ===== ROUND OVER =====
+function showRoundOver(result) {
+  document.getElementById('round-over').style.display = 'flex';
+  const medals = ['🥇','🥈','🥉','4️⃣'];
+  const places = result.placements || [];
+  document.getElementById('round-placements').innerHTML = places.map((seat,i) =>
+    `<div class="placement-row"><span class="place-num">${medals[i]}</span><span>${playerName(seat)}</span></div>`
+  ).join('');
+  document.getElementById('upgrade-info').textContent =
+    `Team ${result.winning_team} +${result.upgrade} → Lv ${result.new_levels[result.winning_team]}`;
+  const wb = document.getElementById('win-banner');
+  wb.style.display = result.game_won ? 'block' : 'none';
+  if (result.game_won) wb.textContent = `🎉 Team ${result.winner_team} wins!`;
+  document.getElementById('btn-next-round').style.display = isHost ? 'inline-block' : 'none';
+  document.getElementById('round-over-waiting').style.display = isHost ? 'none' : 'block';
+}
+function hideRoundOver() { document.getElementById('round-over').style.display = 'none'; }
+
+function setMsg(m) { document.getElementById('msg').textContent = m; }
+function copyCode() {
+  navigator.clipboard.writeText(ROOM_CODE).catch(()=>{});
+  const t = document.getElementById('copied-toast');
+  t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 1600);
+}
+</script>
+</body>
+</html>
