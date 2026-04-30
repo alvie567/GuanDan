@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Lobby · 掼蛋{% endblock %}
+{% block content %}
+<div class="auth-card" style="max-width:460px;">
+  <div class="logo">
+    <h1>掼蛋</h1>
+    <p>Guandan · Online</p>
+  </div>
+
+  {% if error %}
+  <div class="alert alert-error" style="margin-bottom:18px;">
+    <span>{{ error }}</span>
+  </div>
+  {% endif %}
+
+  <div style="margin-bottom:18px;">
+    <div class="form-group">
+      <label>Nickname</label>
+      <input type="text" class="form-control" id="nickname-input" placeholder="{{ user.first_name }}" value="{{ user.first_name }}" maxlength="20">
+    </div>
+  </div>
+
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;">
+    <div style="flex:1;height:1px;background:rgba(255,255,255,0.07);"></div>
+    <span style="color:rgba(255,255,255,0.2);font-size:11px;letter-spacing:2px;text-transform:uppercase;">Create</span>
+    <div style="flex:1;height:1px;background:rgba(255,255,255,0.07);"></div>
+  </div>
+
+  <form method="POST" onsubmit="fillNick(this)" style="margin-bottom:18px;">
+    <input type="hidden" name="action" value="create">
+    <input type="hidden" name="nickname" id="nick-create">
+    <button type="submit" class="btn-submit">Create New Room</button>
+  </form>
+
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;">
+    <div style="flex:1;height:1px;background:rgba(255,255,255,0.07);"></div>
+    <span style="color:rgba(255,255,255,0.2);font-size:11px;letter-spacing:2px;text-transform:uppercase;">or Join</span>
+    <div style="flex:1;height:1px;background:rgba(255,255,255,0.07);"></div>
+  </div>
+
+  <form method="POST" onsubmit="fillNick(this)">
+    <input type="hidden" name="action" value="join">
+    <input type="hidden" name="nickname" id="nick-join">
+    <div class="form-group">
+      <label>Room Code</label>
+      <input class="form-control" type="text" name="room_code" placeholder="ABC123" maxlength="6"
+             style="text-transform:uppercase;letter-spacing:5px;font-size:20px;font-weight:700;text-align:center;"
+             autocomplete="off">
+    </div>
+    <button type="submit" class="btn-submit" style="background:transparent;border:1px solid rgba(255,255,255,0.12);color:rgba(255,255,255,0.75);">Join Room</button>
+  </form>
+</div>
+
+<script>
+function fillNick(form) {
+  const nick = document.getElementById('nickname-input').value.trim() || '{{ user.first_name }}';
+  form.querySelector('[name="nickname"]').value = nick;
+}
+</script>
+{% endblock %}

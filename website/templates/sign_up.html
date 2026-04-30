@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Sign Up · 掼蛋{% endblock %}
+{% block content %}
+<div class="auth-card">
+  <div class="logo">
+    <h1>掼蛋</h1>
+    <p>Guandan · Online</p>
+  </div>
+  <h2>Create your account</h2>
+  <form method="POST" autocomplete="off">
+    <div class="form-group">
+      <label for="email">Email Address</label>
+      <input type="email" class="form-control" id="email" name="email" placeholder="you@example.com" value="{{ request.form.get('email','') }}" required>
+    </div>
+    <div class="form-group">
+      <label for="firstName">Display Name</label>
+      <input type="text" class="form-control" id="firstName" name="firstName" placeholder="e.g. DragonKing" value="{{ request.form.get('firstName','') }}" required>
+    </div>
+    <div class="form-group">
+      <label for="password1">Password</label>
+      <input type="password" class="form-control" id="password1" name="password1" placeholder="At least 7 characters" required>
+    </div>
+    <div class="form-group">
+      <label for="password2">Confirm Password</label>
+      <input type="password" class="form-control" id="password2" name="password2" placeholder="••••••••" required>
+    </div>
+    <button type="submit" class="btn-submit">Create Account</button>
+  </form>
+  <div class="auth-links">
+    <a href="/login">Already have an account? <span>Log in</span></a>
+  </div>
+</div>
+{% endblock %}
