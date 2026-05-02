@@ -14,9 +14,9 @@ VAL_RANK = {v: i for i, v in enumerate(VALS)}  # 2=0, 3=1 ... A=12
 
 def card_rank(card, level):
     v = card['v']
-    if v == 'RJ': return 200
-    if v == 'BJ': return 199
-    if v == level: return 100  # level cards (all suits) outrank A
+    if v == 'RJ': return 30
+    if v == 'BJ': return 25
+    if v == level: return 20  # level cards (all suits) outrank A
     return VAL_RANK.get(v, -1)
 
 def is_wild(card, level):
@@ -25,6 +25,15 @@ def is_wild(card, level):
 
 def is_level_card(card, level):
     return card['v'] == level
+
+def group_by_rank_without_level(cards, level):
+    """Group non-wild cards by effective rank."""
+    groups = {}
+    for c in cards:
+        if is_wild(c, level):
+            continue
+        groups.setdefault(VAL_RANK[c['v']], []).append(c)
+    return groups
 
 def group_by_rank(cards, level):
     """Group non-wild cards by effective rank."""
@@ -58,16 +67,14 @@ def classify(cards, level):
     if len(jokers) == 4 and n == 4:
         return ('jokerbomb', 9999, 4)
 
-    wilds = [c for c in cards if is_wild(c, level)]
-    non_wilds = [c for c in cards if not is_wild(c, level)]
+    wilds = [c for c in non_jokers if is_wild(c, level)]
+    non_wilds = [c for c in non_jokers if not is_wild(c, level)]
     wild_count = len(wilds)
 
     # All wilds → treat as level-card group
     if wild_count == n:
         if n == 1: return ('single', 100, 1)
         if n == 2: return ('pair', 100, 2)
-        if n == 3: return ('triple', 100, 3)
-        if 4 <= n <= 8: return ('bomb', 100 * 10 + n, n)
         return None
 
     groups = group_by_rank(non_wilds, level)
@@ -79,14 +86,24 @@ def classify(cards, level):
 
     # --- Pair ---
     if n == 2:
-        if wild_count == 1:
-            return ('pair', card_rank(non_wilds[0], level), 2)
-        if len(ranks_sorted) == 1 and len(groups[ranks_sorted[0]]) == 2:
-            return ('pair', ranks_sorted[0], 2)
+        if len(jokers) == 2:
+            if jokers[0] == jokers[1]:
+                return ('pair', card_rank(jokers[0], level), 2)
+            else:
+                return None
+        elif len(jokers) == 1:
+            return None
+        else:
+            if wild_count == 1:
+                return ('pair', card_rank(non_wilds[0], level), 2)
+            elif len(ranks_sorted) == 1 and len(groups[ranks_sorted[0]]) == 2:
+                return ('pair', ranks_sorted[0], 2)
         return None
 
     # --- Triple ---
     if n == 3:
+        if len(jokers) > 0:
+            return None
         if wild_count == 2:
             return ('triple', card_rank(non_wilds[0], level), 3)
         if wild_count == 1:
@@ -97,16 +114,28 @@ def classify(cards, level):
             return ('triple', ranks_sorted[0], 3)
         return None
 
+    # --- 4-bomb ---
+    if n == 4:
+        if len(jokers) > 0:
+            return None
+        return(_try_bomb_n(non_wilds, wild_count, level, n))
+
     # --- 5-card combos ---
     if n == 5:
-        r = _try_straightflush(non_wilds, wild_count, level)
+        if len(jokers) != 0 and len(jokers) != 2:
+            r = _try_fullhouse(non_wilds, wild_count, jokers, level)
+            if r: return r
+        if len(jokers) > 0:
+            return None
+        r = _try_straightflush(non_wilds, wild_count)
         if r: return r
-        r = _try_fullhouse(non_wilds, wild_count, level)
-        if r: return r
-        r = _try_straight(non_wilds, wild_count, level)
+        r = _try_straight(non_wilds, wild_count, False)
         if r: return r
         r = _try_bomb_n(non_wilds, wild_count, level, 5)
         if r: return r
+        return None
+
+    if len(jokers) > 0:
         return None
 
     # --- 6-card combos ---
@@ -120,7 +149,7 @@ def classify(cards, level):
         return None
 
     # --- 7 or 8 card bombs ---
-    if 7 <= n <= 8:
+    if n == 8 or n == 7:
         r = _try_bomb_n(non_wilds, wild_count, level, n)
         if r: return r
         return None
@@ -130,106 +159,70 @@ def classify(cards, level):
 
 def _try_bomb_n(non_wilds, wild_count, level, n):
     """All n cards same rank (wilds fill)."""
-    if not non_wilds:
-        return None
     groups = group_by_rank(non_wilds, level)
-    ranks = list(groups.keys())
-    if len(ranks) == 1:
-        rank = ranks[0]
+    ranks_sorted = list(groups.keys())
+    if len(ranks_sorted) == 1:
+        rank = ranks_sorted[0]
         if len(groups[rank]) + wild_count == n:
-            return ('bomb', rank * 10 + n, n)
+            return ('bomb', n * 100 + rank, n)
     return None
 
 
-def _try_fullhouse(non_wilds, wild_count, level):
+def _try_fullhouse(non_wilds, wild_count, jokers, level):
     """Triple + pair, wilds can fill either."""
     groups = group_by_rank(non_wilds, level)
-    ranks = sorted(groups.keys())
+    ranks_sorted = sorted(groups.keys())
 
-    if len(non_wilds) + wild_count != 5:
+    if len(jokers) == 2:
+        if jokers[0] != jokers[1]:
+            return None
+        if len(ranks_sorted) != 1:
+            return None
+        return ('fullhouse', ranks_sorted[0], 5)
+
+    if len(ranks_sorted) != 2:
         return None
 
-    # Try each rank as the triple
-    for triple_rank in ranks:
-        have_triple = len(groups[triple_rank])
-        need_for_triple = max(0, 3 - have_triple)
-        wilds_left = wild_count - need_for_triple
-        if wilds_left < 0:
-            continue
-        # Remaining cards + wilds_left must be exactly 2 (a pair)
-        other = sum(len(groups[r]) for r in ranks if r != triple_rank)
-        if other + wilds_left == 2:
-            return ('fullhouse', triple_rank, 5)
-
-    # Edge: wild_count >= 3, one rank of non-wilds
-    if len(ranks) == 1 and wild_count >= 2:
-        base = ranks[0]
-        bc = len(groups[base])
-        if bc + wild_count == 5:
-            # e.g. 3+2wilds → triple=base, pair=wild
-            if bc >= 3:
-                return ('fullhouse', base, 5)
-            if bc == 2:
-                return ('fullhouse', 100, 5)  # wild triple
-
-    return None
+    if (len(groups[ranks_sorted[0]]) != 2 and len(groups[ranks_sorted[0]]) != 3) or (len(groups[ranks_sorted[1]]) != 2 and len(groups[ranks_sorted[1]]) != 3):
+        return None
+    
+    if len(groups[ranks_sorted[1]]) == 2 and wild_count == 0:
+        return ('fullhouse', ranks_sorted[0], 5)
+    else:
+        return ('fullhouse', ranks_sorted[1], 5)
 
 
-def _try_straightflush(non_wilds, wild_count, level):
+def _try_straightflush(non_wilds, wild_count):
     """5 consecutive same-suit cards, wilds fill gaps (wild doesn't provide suit)."""
-    non_joker = [c for c in non_wilds if c['v'] not in ('BJ', 'RJ')]
-    if not non_joker:
+    suit = non_wilds[0]['s']
+    if not all(c['s'] == suit for c in non_wilds) or suit == '':
         return None
-    suit = non_joker[0]['s']
-    if not all(c['s'] == suit for c in non_joker) or suit == '':
-        return None
-    base_vals = sorted(VAL_RANK.get(c['v'], -1) for c in non_joker)
-    if any(v < 0 for v in base_vals):
-        return None
-    total = len(base_vals) + wild_count
-    if total != 5:
-        return None
+    return _try_straight(non_wilds, wild_count, True)
+
+
+def _try_straight(non_wilds, wild_count, boo):
+    base_vals = sorted(VAL_RANK.get(c['v'], -1) for c in non_wilds)
     # Try all 5-runs that can accommodate the fixed cards
     lo = max(0, base_vals[0] - wild_count)
     hi = base_vals[0]
-    for start in range(lo, hi + 1):
+    for start in range(hi, lo-1, -1):
         run = list(range(start, start + 5))
         if run[-1] > 12: continue  # A=12 max
         needed = [v for v in run if v not in base_vals]
         dups = len([v for v in base_vals if v not in run])
-        if len(needed) <= wild_count and dups == 0:
-            return ('straightflush', start, 5)
-    return None
-
-
-def _try_straight(non_wilds, wild_count, level):
-    """5 consecutive singles (no 2s allowed in straight)."""
-    fixed = [c for c in non_wilds if c['v'] not in ('BJ', 'RJ')]
-    fixed_vals = sorted(VAL_RANK.get(c['v'], -1) for c in fixed)
-    # 2 (rank 0) not allowed in straight
-    if any(v == 0 for v in fixed_vals): return None
-    if any(v < 0 for v in fixed_vals): return None
-    if len(fixed_vals) + wild_count != 5: return None
-
-    for start in range(1, 9):  # 3(1) through 10(8), max run ending at A(12) is 8..12
-        run = list(range(start, start + 5))
-        if run[-1] > 12: continue
-        needed = [v for v in run if v not in fixed_vals]
-        dups = len([v for v in fixed_vals if v not in run])
-        if len(needed) <= wild_count and dups == 0:
-            return ('straight', start, 5)
+        if len(needed) == wild_count and dups == 0:
+            if boo:
+                return ('straightflush', start, 5)
+            else:
+                return ('straight', start, 5)
     return None
 
 
 def _try_tube(non_wilds, wild_count, level):
     """3 consecutive pairs."""
-    groups = group_by_rank(non_wilds, level)
-    if len(non_wilds) + wild_count != 6:
-        return None
-    for start in range(0, 98):
+    groups = group_by_rank_without_level(non_wilds, level)
+    for start in range(10, -1, -1):
         run = [start, start+1, start+2]
-        if any(r >= 100 for r in run) or any(r > 12 for r in run):
-            continue
         needed = sum(max(0, 2 - len(groups.get(r, []))) for r in run)
         extra = sum(max(0, len(groups.get(r, [])) - 2) for r in run)
         if needed == wild_count and extra == 0:
@@ -239,13 +232,9 @@ def _try_tube(non_wilds, wild_count, level):
 
 def _try_plate(non_wilds, wild_count, level):
     """2 consecutive triples."""
-    groups = group_by_rank(non_wilds, level)
-    if len(non_wilds) + wild_count != 6:
-        return None
-    for start in range(0, 98):
+    groups = group_by_rank_without_level(non_wilds, level)
+    for start in range(11, -1, -1):
         run = [start, start+1]
-        if any(r >= 100 for r in run) or any(r > 12 for r in run):
-            continue
         needed = sum(max(0, 3 - len(groups.get(r, []))) for r in run)
         extra = sum(max(0, len(groups.get(r, [])) - 3) for r in run)
         if needed == wild_count and extra == 0:
@@ -281,8 +270,8 @@ def beats(new_cards, current_cards, level):
         if t == 'bomb': return BOMB_SIZE_PRIORITY.get(l, 0)
         return 0  # not a bomb
 
-    n_is_bomb = nt in ('bomb', 'straightflush', 'jokerbomb')
-    c_is_bomb = ct in ('bomb', 'straightflush', 'jokerbomb')
+    n_is_bomb = nt in ('bomb', 'straightflush')
+    c_is_bomb = ct in ('bomb', 'straightflush')
 
     if n_is_bomb and not c_is_bomb:
         return True
@@ -295,13 +284,13 @@ def beats(new_cards, current_cards, level):
         if np != cp:
             return np > cp
         # Same priority (same type and size): compare rank
-        if nt == 'straightflush' and ct == 'straightflush':
-            return nv > cv
-        if nt == 'bomb' and ct == 'bomb':
+        if nt == ct and nl == cl and nv != cv:
             return nv > cv
         return False
 
     # Non-bomb vs non-bomb: must be same type and same length
     if nt != ct or nl != cl:
+        return False
+    if nv == cv:
         return False
     return nv > cv
