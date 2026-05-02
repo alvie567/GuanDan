@@ -215,6 +215,14 @@ def _try_straight(non_wilds, wild_count, boo):
                 return ('straightflush', start, 5)
             else:
                 return ('straight', start, 5)
+    run = [0,1,2,3,12]
+    needed = [v for v in run if v not in base_vals]
+    dups = len([v for v in base_vals if v not in run])
+    if len(needed) == wild_count and dups == 0:
+        if boo:
+            return ('straightflush', 12, 5)
+        else:
+            return ('straight', 12, 5)   
     return None
 
 
