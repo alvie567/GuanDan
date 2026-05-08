@@ -205,6 +205,8 @@ def _try_straight(non_wilds, wild_count, boo):
     # Try all 5-runs that can accommodate the fixed cards
     lo = max(0, base_vals[0] - wild_count)
     hi = base_vals[0]
+    if len(set(base_vals)) != len(base_vals):
+        return None
     for start in range(hi, lo-1, -1):
         run = list(range(start, start + 5))
         if run[-1] > 12: continue  # A=12 max

@@ -188,8 +188,8 @@ def on_host_start(data):
             emit('error', {'msg': 'Only the host can start the game'})
             return
         players = _get_room_players(room.id)
-        if len(players) < 2:
-            emit('error', {'msg': 'Need at least 2 players to start'})
+        if len(players) < 4:
+            emit('error', {'msg': 'Need at least 4 players to start'})
             return
         _start_game(room)
     except Exception as e:

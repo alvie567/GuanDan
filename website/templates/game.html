@@ -773,7 +773,9 @@ function showComboHint() {
   else if (n === 4) hint.textContent = '4-card Bomb?';
   else if (n === 5) hint.textContent = 'Straight / Full House / Straight Flush?';
   else if (n === 6) hint.textContent = 'Tube / Plate / 6-card Bomb?';
-  else hint.textContent = `${n} cards`;
+  else if (n === 7) hint.textContent = '7-card Bomb?';
+  else if (n === 8) hint.textContent = '8-card Bomb?';
+  else hint.textContent = 'Invalid Combination';
 }
 
 // ===== ACTIONS =====
