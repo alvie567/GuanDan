@@ -1,9 +1,10 @@
 flask
 flask-sqlalchemy
 flask-socketio
+flask-login
+werkzeug
 psycopg2-binary
 gunicorn
 gevent
 gevent-websocket
-flask-login
-werkzeug
+python-dotenv

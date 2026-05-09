@@ -122,7 +122,7 @@ def classify(cards, level):
 
     # --- 5-card combos ---
     if n == 5:
-        if len(jokers) != 0 and len(jokers) != 2:
+        if len(jokers) == 0 or len(jokers) == 2:
             r = _try_fullhouse(non_wilds, wild_count, jokers, level)
             if r: return r
         if len(jokers) > 0:
@@ -140,6 +140,12 @@ def classify(cards, level):
 
     # --- 6-card combos ---
     if n == 6:
+        groups = group_by_rank(non_wilds, level)
+        ranks_sorted = sorted(groups.keys())
+        if wild_count == 2 and len(ranks_sorted) == 2 and (ranks_sorted[1]-ranks_sorted[0] == 1 or ranks_sorted[1]-ranks_sorted[0] == 12) and len(groups[ranks_sorted[0]]) == 2 and len(groups[ranks_sorted[1]]) == 2:
+            if ranks_sorted[0] == 0 and ranks_sorted[1] == 12:
+                return ("tuplate", -1, 6)
+            return ("tuplate", ranks_sorted[0], 6)
         r = _try_tube(non_wilds, wild_count, level)
         if r: return r
         r = _try_plate(non_wilds, wild_count, level)
@@ -180,16 +186,21 @@ def _try_fullhouse(non_wilds, wild_count, jokers, level):
             return None
         return ('fullhouse', ranks_sorted[0], 5)
 
-    if len(ranks_sorted) != 2:
+    if len(ranks_sorted) > 2:
         return None
 
-    if (len(groups[ranks_sorted[0]]) != 2 and len(groups[ranks_sorted[0]]) != 3) or (len(groups[ranks_sorted[1]]) != 2 and len(groups[ranks_sorted[1]]) != 3):
+    if (len(groups[ranks_sorted[0]]) > 3) or (len(ranks_sorted) == 2 and len(groups[ranks_sorted[1]]) > 3):
         return None
     
-    if len(groups[ranks_sorted[1]]) == 2 and wild_count == 0:
+    if len(ranks_sorted) == 1:
+        if len(groups[ranks_sorted[0]])!=3:
+            return None
         return ('fullhouse', ranks_sorted[0], 5)
-    else:
+
+    if len(groups[ranks_sorted[1]]) == 3 or (len(groups[ranks_sorted[1]]) == 2 and wild_count > 0) or (len(groups[ranks_sorted[1]]) == 1 and wild_count == 2):
         return ('fullhouse', ranks_sorted[1], 5)
+    else:
+        return ('fullhouse', ranks_sorted[0], 5)
 
 
 def _try_straightflush(non_wilds, wild_count):
@@ -222,9 +233,9 @@ def _try_straight(non_wilds, wild_count, boo):
     dups = len([v for v in base_vals if v not in run])
     if len(needed) == wild_count and dups == 0:
         if boo:
-            return ('straightflush', 12, 5)
+            return ('straightflush', -1, 5)
         else:
-            return ('straight', 12, 5)   
+            return ('straight', -1, 5)   
     return None
 
 
@@ -237,6 +248,11 @@ def _try_tube(non_wilds, wild_count, level):
         extra = sum(max(0, len(groups.get(r, [])) - 2) for r in run)
         if needed == wild_count and extra == 0:
             return ('tube', start, 6)
+    run = [0,1,12]
+    needed = sum(max(0, 2 - len(groups.get(r, []))) for r in run)
+    extra = sum(max(0, len(groups.get(r, [])) - 2) for r in run)
+    if needed == wild_count and extra == 0:
+        return ('tube', -1, 6)
     return None
 
 
@@ -249,24 +265,26 @@ def _try_plate(non_wilds, wild_count, level):
         extra = sum(max(0, len(groups.get(r, [])) - 3) for r in run)
         if needed == wild_count and extra == 0:
             return ('plate', start, 6)
+    run = [0,12]
+    needed = sum(max(0, 3 - len(groups.get(r, []))) for r in run)
+    extra = sum(max(0, len(groups.get(r, [])) - 3) for r in run)
+    if needed == wild_count and extra == 0:
+        return ('plate', -1, 6)
     return None
 
 
 BOMB_SIZE_PRIORITY = {4: 1, 5: 2, 6: 4, 7: 5, 8: 6}
 # straight flush beats 6-card bomb → SF priority = 3
-
-def beats(new_cards, current_cards, level):
+def beats(new_cards, current_combo, level):
     new_combo = classify(new_cards, level)
     if new_combo is None:
         return False
-    if not current_cards:
-        return True
-
-    cur_combo = classify(current_cards, level)
-    if cur_combo is None:
-        return True
-
     nt, nv, nl = new_combo
+    if current_combo is None:
+        return True
+
+    cur_combo = tuple(current_combo)
+
     ct, cv, cl = cur_combo
 
     # Joker bomb beats everything
@@ -275,7 +293,6 @@ def beats(new_cards, current_cards, level):
 
     # Determine bomb priority scores
     def bomb_priority(t, l):
-        if t == 'jokerbomb': return 7
         if t == 'straightflush': return 3
         if t == 'bomb': return BOMB_SIZE_PRIORITY.get(l, 0)
         return 0  # not a bomb
@@ -299,6 +316,15 @@ def beats(new_cards, current_cards, level):
         return False
 
     # Non-bomb vs non-bomb: must be same type and same length
+    if nt == "tuplate" and (ct == "plate" or ct == "tube"):
+        if ct == "plate":
+            return nv > cv
+        else:
+            if cv < 10:
+                return nv > cv
+            else:
+                return False
+        
     if nt != ct or nl != cl:
         return False
     if nv == cv:

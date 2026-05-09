@@ -444,6 +444,15 @@ socket.on('tribute_update', data => {
   setMsg(`Waiting for ${data.remaining} tribute return(s)…`);
 });
 
+socket.on('prompt_tuplate', data => {
+  const choice = confirm('Tube (3 consecutive pairs) or Plate (2 consecutive triples)?\n\nOK = Tube    Cancel = Plate');
+  socket.emit('play_cards', {
+    code: ROOM_CODE,
+    cards: data.cards,
+    declared_type: choice ? 'tube' : 'plate'
+  });
+});
+
 // ===== LOBBY =====
 function showLobby() {
   document.getElementById('lobby').style.display = 'flex';
@@ -780,15 +789,62 @@ function showComboHint() {
 
 // ===== ACTIONS =====
 function doPlay() {
-  if (devMode) {
-    const selIds = new Set(selected);
-    myHand = myHand.filter(c => !selIds.has(c.v + c.s));
-    renderHand(myHand);
-    setMsg(`DEV: played ${selIds.size} card(s)`);
-    return;
-  }
   const cards = myHand.filter(c => selected.has(c.v + c.s));
-  socket.emit('play_cards', { code: ROOM_CODE, cards });
+  const combo = clientClassify(cards, myLevel);
+  
+  if (combo && combo[0] === 'tuplate') {
+    showTuplateDialog(cards);
+  } else {
+    socket.emit('play_cards', { code: ROOM_CODE, cards, declared_type: null });
+  }
+}
+
+function showTuplateDialog(cards) {
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(10,15,13,0.95);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;z-index:300;';
+  overlay.innerHTML = `
+    <h2 style="color:#f9a825;font-size:18px;">Declare combination type</h2>
+    <p style="color:rgba(255,255,255,0.5);font-size:13px;">This hand can be played as either:</p>
+    <div style="display:flex;gap:12px;">
+      <button id="btn-tube" class="btn btn-primary">Tube (3 consecutive pairs)</button>
+      <button id="btn-plate" class="btn">Plate (2 consecutive triples)</button>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  
+  overlay.querySelector('#btn-tube').onclick = () => {
+    overlay.remove();
+    socket.emit('play_cards', { code: ROOM_CODE, cards, declared_type: 'tube' });
+  };
+  overlay.querySelector('#btn-plate').onclick = () => {
+    overlay.remove();
+    socket.emit('play_cards', { code: ROOM_CODE, cards, declared_type: 'plate' });
+  };
+}
+
+function clientClassify(cards, level) {
+  // Minimal classify just to detect tuplate — server does full validation
+  const wilds = cards.filter(c => c.v === level && c.s === 'H');
+  const nonWilds = cards.filter(c => !(c.v === level && c.s === 'H') && c.v !== 'BJ' && c.v !== 'RJ');
+  const wc = wilds.length;
+  if (cards.length !== 6) return null;
+  
+  const VALS = ['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
+  const groups = {};
+  nonWilds.forEach(c => {
+    const r = VALS.indexOf(c.v);
+    if (r >= 0) groups[r] = (groups[r] || 0) + 1;
+  });
+  const ranks = Object.keys(groups).map(Number).sort((a,b)=>a-b);
+  
+  if (wc === 2 && ranks.length === 2) {
+    const diff = ranks[1] - ranks[0];
+    const wrap = ranks[0] === 0 && ranks[1] === 12;
+    if ((diff === 1 || wrap) && groups[ranks[0]] === 2 && groups[ranks[1]] === 2) {
+      return ['tuplate', ranks[0], 6];
+    }
+  }
+  return null; // let server classify normally
 }
 function doPass() {
   if (devMode) { setMsg('DEV: passed'); return; }

@@ -203,6 +203,7 @@ def on_play(data):
         sid = request.sid
         code = data.get('code', '').upper()
         cards = data.get('cards', [])
+        declared_type = data.get('declared_type')  # 'tube', 'plate', or None
 
         player = Player.query.filter_by(session_id=sid).first()
         if not player:
@@ -219,16 +220,14 @@ def on_play(data):
             emit('error', {'msg': "It's not your turn"})
             return
 
-        # Determine current level for this player's team
         level = _level_for_seat(player.seat, settings)
-        current_pile = state.get('pile', [])
+        current_pile_combo = state.get('pile_combo')
         last_seat = state.get('last_play_seat')
 
-        # If this player owns the current pile (everyone else passed), any legal play
         if last_seat == player.seat:
-            current_pile = []
+            current_pile_combo = None
 
-        if not beats(cards, current_pile, level):
+        if not beats(cards, current_pile_combo, level):
             combo = classify(cards, level)
             if combo is None:
                 emit('error', {'msg': 'Invalid combination'})
@@ -236,7 +235,6 @@ def on_play(data):
                 emit('error', {'msg': "Doesn't beat the current play"})
             return
 
-        # Remove cards from hand
         hand = state['hands'].get(player.seat, [])
         played_ids = [c['v'] + c['s'] for c in cards]
         new_hand = []
@@ -247,27 +245,33 @@ def on_play(data):
                 temp_played.remove(cid)
             else:
                 new_hand.append(c)
+
+        combo = classify(cards, level)
+        if combo and combo[0] == 'tuplate':
+            if declared_type in ('tube', 'plate'):
+                combo = (declared_type, combo[1], combo[2])
+            else:
+                emit('prompt_tuplate', {'cards': cards}, to=player.session_id)
+                return
+        state['pile_combo'] = list(combo) if combo else None
         state['hands'][player.seat] = new_hand
-        state['pile'] = cards
-        state['last_play'] = {'seat': player.seat, 'cards': cards, 'combo': classify(cards, level)[0] if classify(cards, level) else 'unknown'}
+        state['pile_combo'] = list(combo) if combo else None
+        state['pile'] = cards  # store actual cards played for broadcast
+        state['last_play'] = {'seat': player.seat, 'combo': combo[0] if combo else 'unknown'}
         state['last_play_seat'] = player.seat
         state['passes'] = 0
 
-        # Check if player finished
         if len(new_hand) == 0:
             finished = state.get('finished', [])
             finished.append(player.seat)
             state['finished'] = finished
             if len(finished) >= 3:
-                # Round over
                 state = _resolve_round(state, settings, room)
                 room.set_state(state)
                 db.session.commit()
                 _broadcast_game_state(room, code)
                 tributes = state.get('pending_tributes', [])
                 if tributes:
-                    # Broadcast game state so receivers see their new card
-                    _broadcast_game_state(room, code)
                     emit('tribute_phase', {
                         'tributes': tributes,
                         'result': state.get('round_result', {})
@@ -276,7 +280,6 @@ def on_play(data):
                     emit('round_over', state.get('round_result', {}), to=code)
                 return
 
-        # Advance turn (skip finished players)
         state = _advance_turn(state, player.seat)
         room.set_state(state)
         db.session.commit()
@@ -311,15 +314,13 @@ def on_pass(data):
         # If everyone else passed, last player who played leads again with new play
         if passes >= active_count - 1:
             state['passes'] = 0
+            state['pile_combo'] = None
             state['pile'] = []
-            # Give lead back to last_play_seat
             last = state.get('last_play_seat')
             if last and last not in state.get('finished', []):
                 state['active_seat'] = last
             else:
                 state = _advance_turn(state, player.seat)
-        else:
-            state = _advance_turn(state, player.seat)
 
         room.set_state(state)
         db.session.commit()
@@ -417,12 +418,11 @@ def on_tribute_return(data):
 # ---------- helpers ----------
 
 def _level_for_seat(seat, settings):
-    # The active level is determined by the first-seat player's team
-    first_seat = settings.get('first_seat', 'bottom')
-    teams = settings.get('teams', {'A': ['bottom','top'], 'B': ['left','right']})
+    # Each player's level is determined by THEIR OWN team's current level.
+    teams  = settings.get('teams',  {'A': ['bottom','top'], 'B': ['left','right']})
     levels = settings.get('levels', {'A': '2', 'B': '2'})
     for team, seats in teams.items():
-        if first_seat in seats:
+        if seat in seats:
             return levels.get(team, '2')
     return '2'
 
@@ -528,7 +528,6 @@ def _start_game(room):
     state = {
         'settings': settings,
         'hands': hands,
-        'pile': [],
         'active_seat': first_seat,
         'last_play': None,
         'last_play_seat': None,
@@ -543,10 +542,10 @@ def _start_game(room):
 def _send_game_state_to(player, room, state):
     seat = player.seat
     settings = state.get('settings', _default_settings())
+    pile_combo = state.get('pile_combo')
     personal = {
         'phase': settings.get('phase', 'lobby'),
         'active_seat': state.get('active_seat'),
-        'pile': state.get('pile', []),
         'last_play': state.get('last_play'),
         'your_seat': seat,
         'hand': state['hands'].get(seat, []),
@@ -554,6 +553,8 @@ def _send_game_state_to(player, room, state):
         'finished': state.get('finished', []),
         'settings': settings,
         'level': _level_for_seat(seat, settings),
+        'pile': state.get('pile', []),
+        'pile_combo': pile_combo,
     }
     emit('game_state', personal, to=player.session_id)
 
